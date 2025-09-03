@@ -10,7 +10,7 @@ from plotly.subplots import make_subplots
 
 dotenv.load_dotenv()
 
-db_connection_str = os.environ.get('DB_CONNECTION_STRING')
+db_connection_str =  st.secrets.get("DB_CONNECTION_STRING")
 if not db_connection_str:
     raise ValueError("No DB_CONNECTION_STRING found in environment or Streamlit secrets.")
 engine = sqlalchemy.create_engine(db_connection_str)
