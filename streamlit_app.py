@@ -5,9 +5,9 @@ import streamlit as st
 import os
 
 # Establish the database connection using a SQLAlchemy engine.
-db_connection_str = os.environ.get('DB_CONNECTION_STR')
+db_connection_str = os.environ.get('DB_CONNECTION_STRING', st.secrets.get('DB_CONNECTION_STRING'))
 if not db_connection_str:
-    raise ValueError("Environment variable DB_CONNECTION_STR is not set.")
+    raise ValueError("No DB_CONNECTION_STRING found in environment or Streamlit secrets.")
 engine = sqlalchemy.create_engine(db_connection_str)
 
 # Get a list of all table names from the database and filter for 'long' tables.
