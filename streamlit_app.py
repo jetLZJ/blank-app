@@ -3,9 +3,14 @@ import sqlalchemy
 import plotly.express as px
 import streamlit as st
 import os
+import dotenv
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# Establish the database connection using a SQLAlchemy engine.
-db_connection_str = os.environ.get('DB_CONNECTION_STRING', st.secrets.get('DB_CONNECTION_STRING'))
+dotenv.load_dotenv()
+
+db_connection_str = os.environ.get('DB_CONNECTION_STRING')
 if not db_connection_str:
     raise ValueError("No DB_CONNECTION_STRING found in environment or Streamlit secrets.")
 engine = sqlalchemy.create_engine(db_connection_str)
@@ -62,7 +67,7 @@ periods = {
     '2022-2024': (pd.Timestamp('2022-01-01'), pd.Timestamp('2024-12-31')),
 }
 
-import matplotlib.pyplot as plt
+
 
 # Assume df_long_dict['unemployment_rate_by_occupation_long'] is available
 df_occ = df_long_dict['unemployment_rate_by_occupation_long'].copy()
@@ -100,9 +105,106 @@ plt.tight_layout()
 plt.show()
 
 
-st.title("🎈 My new app test")
+st.title("Unemployment rate between different occupations")
 st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
+    "This is a test"
 )
-st.plotly_chart(fig, use_container_width=True)
+st.pyplot(fig)
 
+
+
+
+df = df_long_dict['unemployed_by_qualification_sex_long']
+
+df_male = df[df['gender'] == 'Male'].copy()
+df_female = df[df['gender'] == 'Female'].copy()
+
+def prepare_animated_df(df_group):
+    df_group.set_index('year', inplace=True)
+    df_interp = df_group.groupby(['gender', 'education'])['unemployed_count'] \
+        .resample('ME').mean().interpolate('linear').reset_index()
+    df_group_sorted = df_group.sort_values(['gender', 'year'])
+    frames = []
+    frame_dates = sorted(df_interp['year'].unique())
+    for date in frame_dates:
+        frame_data = df_interp[df_interp['year'] <= date].copy()
+        frame_data['frame'] = date.strftime('%Y-%m')
+        frames.append(frame_data)
+    return pd.concat(frames)
+
+df_cumulative_male = prepare_animated_df(df_male)
+df_cumulative_female = prepare_animated_df(df_female)
+
+fig = make_subplots(
+    rows=1,
+    cols=2,
+    subplot_titles=("Male", "Female"),
+    shared_yaxes=True,
+    horizontal_spacing=0.08
+)
+fig.update_layout(width=1200, height=500)
+
+for education in df_cumulative_male['education'].unique():
+    d = df_cumulative_male[df_cumulative_male['education'] == education]
+    fig.add_trace(
+        go.Scatter(
+        x=d[d['frame'] == d['frame'].min()]['year'],
+        y=d[d['frame'] == d['frame'].min()]['unemployed_count'],
+        mode='lines+markers',
+        name=education,
+        legendgroup=education,
+        showlegend=True
+        ),
+        row=1, col=1
+    )
+
+for education in df_cumulative_female['education'].unique():
+    d = df_cumulative_female[df_cumulative_female['education'] == education]
+    fig.add_trace(
+        go.Scatter(
+        x=d[d['frame'] == d['frame'].min()]['year'],
+        y=d[d['frame'] == d['frame'].min()]['unemployed_count'],
+        mode='lines+markers',
+        name=education,
+        legendgroup=education,
+        showlegend=True
+        ),
+        row=1, col=2
+    )
+
+frames = []
+frame_labels = sorted(set(df_cumulative_male['frame']) | set(df_cumulative_female['frame']))
+for frame in frame_labels:
+    frame_data_male = df_cumulative_male[df_cumulative_male['frame'] == frame]
+    frame_data_female = df_cumulative_female[df_cumulative_female['frame'] == frame]
+    data = []
+    for education in df_cumulative_male['education'].unique():
+        d = frame_data_male[frame_data_male['education'] == education]
+        data.append(go.Scatter(x=d['year'], y=d['unemployed_count'], mode='lines'))
+    for education in df_cumulative_female['education'].unique():
+        d = frame_data_female[frame_data_female['education'] == education]
+        data.append(go.Scatter(x=d['year'], y=d['unemployed_count'], mode='lines'))
+    frames.append(go.Frame(data=data, name=frame))
+
+fig.frames = frames
+
+fig.update_layout(
+    template='plotly_dark',
+    title='Unemployment Trends by Education (Male and Female)',
+    font=dict(family='Courier New', size=12, color='lightgray'),
+    legend_title_text='Education',
+    xaxis=dict(title='Year', type='date', tickformat='%Y', dtick='M12', range=['2014-01-01', '2024-01-01']),
+    xaxis2=dict(title='Year', type='date', tickformat='%Y', dtick='M12', range=['2014-01-01', '2024-01-01']),
+    yaxis=dict(title='Unemployed Count', range=[3, 25]),
+    margin=dict(l=40, r=40, t=60, b=40),
+    updatemenus=[{
+        "type": "buttons",
+        "buttons": [
+        {"label": "Play", "method": "animate", "args": [None, {"frame": {"duration": 50, "redraw": True}, "transition": {"duration": 50}, "fromcurrent": True, "mode": "immediate"}]},
+        {"label": "Pause", "method": "animate", "args": [[None], {"frame": {"duration": 0, "redraw": False}, "mode": "immediate"}]}
+        ]
+    }]
+)
+
+
+st.plotly_chart(fig, use_container_width=True)
